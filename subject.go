@@ -33,12 +33,18 @@ func (s *Subject[T]) Next(elm T) {
 	if s.completed {
 		return
 	}
+	if s.completed { //Is this correct?
+		return
+	}
 	for _, sub := range s.subs {
 		sub.Next(elm)
 	}
 }
 
 func (s *Subject[T]) Complete() {
+	if s.completed {
+		return
+	}
 	s.completed = true
 	for _, sub := range s.subs {
 		sub.Complete()
@@ -47,6 +53,9 @@ func (s *Subject[T]) Complete() {
 }
 
 func (s *Subject[T]) Error(err error) {
+	if s.completed {
+		return
+	}
 	for _, sub := range s.subs {
 		sub.Error(err)
 	}
@@ -65,8 +74,9 @@ func (s *Subject[T]) Subscribe(o Observer[T]) Subscription {
 	key := s.cur
 	s.subs[key] = o
 	s.cur++
+	// TODO: If completed already send completion
 	return subscription{
 		key:   key,
-		unsub: func() { delete(s.subs, key) }, // Should unsub cause completion?
+		unsub: func() { delete(s.subs, key); o.Complete() }, // Should unsub cause completion?
 	}
 }

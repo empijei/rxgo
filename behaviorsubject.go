@@ -45,6 +45,9 @@ func (s *BehaviorSubject[T]) Next(elm T) {
 }
 
 func (s *BehaviorSubject[T]) Complete() {
+	if s.completed {
+		return
+	}
 	s.completed = true
 	for _, sub := range s.subs {
 		sub.Complete()
@@ -53,6 +56,9 @@ func (s *BehaviorSubject[T]) Complete() {
 }
 
 func (s *BehaviorSubject[T]) Error(err error) {
+	if s.completed {
+		return
+	}
 	for _, sub := range s.subs {
 		sub.Error(err)
 	}
@@ -61,7 +67,7 @@ func (s *BehaviorSubject[T]) Error(err error) {
 func (s *BehaviorSubject[T]) Subscribe(o Observer[T]) Subscription {
 	key := s.cur
 	s.subs[key] = o
-	o.Next(s.val)
+	o.Next(s.val) // We send the last non-error value
 	s.cur++
 	return subscription{
 		key:   key,

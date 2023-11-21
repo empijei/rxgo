@@ -14,9 +14,14 @@
 
 package rxgo
 
+type event[T any] struct {
+	value T
+	err   error
+}
+
 type ReplaySubject[T any] struct {
 	size int
-	vals []T
+	buf  []event[T]
 
 	completed bool
 	cur       int
@@ -36,20 +41,27 @@ func NewReplaySubject[T any](size int) *ReplaySubject[T] {
 	return rs
 }
 
+func (s *ReplaySubject[T]) push(e event[T]) {
+	s.buf = append(s.buf, e)
+	if len(s.buf) > s.size {
+		s.buf = s.buf[1:]
+	}
+}
+
 func (s *ReplaySubject[T]) Next(elm T) {
-	if s.completed { // Is this correct?
+	if s.completed {
 		return
 	}
-	s.vals = append(s.vals, elm)
-	if len(s.vals) > s.size {
-		s.vals = s.vals[1:]
-	}
+	s.push(event[T]{value: elm})
 	for _, sub := range s.subs {
 		sub.Next(elm)
 	}
 }
 
 func (s *ReplaySubject[T]) Complete() {
+	if s.completed {
+		return
+	}
 	s.completed = true
 	for _, sub := range s.subs {
 		sub.Complete()
@@ -58,7 +70,10 @@ func (s *ReplaySubject[T]) Complete() {
 }
 
 func (s *ReplaySubject[T]) Error(err error) {
-	// BOOKMARK
+	if s.completed {
+		return
+	}
+	s.push(event[T]{err: err})
 	for _, sub := range s.subs {
 		sub.Error(err)
 	}
@@ -67,10 +82,19 @@ func (s *ReplaySubject[T]) Error(err error) {
 func (s *ReplaySubject[T]) Subscribe(o Observer[T]) Subscription {
 	key := s.cur
 	s.subs[key] = o
-	o.Next(s.val)
 	s.cur++
+	for _, v := range s.buf {
+		if v.err != nil {
+			o.Error(v.err)
+		} else {
+			o.Next(v.value)
+		}
+	}
+	if s.completed {
+		o.Complete()
+	}
 	return subscription{
 		key:   key,
-		unsub: func() { delete(s.subs, key) }, // Should unsub cause completion?
+		unsub: func() { delete(s.subs, key); o.Complete() },
 	}
 }
